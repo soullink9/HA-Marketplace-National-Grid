@@ -1,6 +1,9 @@
 {
   "domain": "nationalgrid",
   "name": "National Grid",
+  "categories": [
+    "energy.meters_monitoring"
+  ],
   "codeowners": [
     "@soullink9"
   ],
