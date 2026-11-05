@@ -1,0 +1,40 @@
+name: Bug report
+description: Something in the National Grid integration isn't working as it should.
+labels: [bug, nationalgrid]
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Home Assistant (Settings → About) and this integration (Settings → Devices & services → National Grid).
+      placeholder: Home Assistant 2026.9.4, National Grid 1.0.0
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - Setup or sign-in
+        - Energy dashboard (usage, export, cost or credit)
+        - History import
+        - Sensors (grid power, today's energy or cost, rate)
+        - Something else
+  - type: input
+    id: meter
+    attributes:
+      label: Your meter and service
+      description: Your state, and whether you have solar or another way of sending power back to the grid. Leave out account numbers.
+      placeholder: Upstate New York, smart meter, no solar
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Settings → System → Logs, search for nationalgrid. Remove anything personal (email, account or meter numbers) before posting.
+      render: text
