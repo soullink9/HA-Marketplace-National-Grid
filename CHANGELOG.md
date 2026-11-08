@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- A brief server error on National Grid's sign-in page (`Failed to post credentials. Status: 500`) no longer makes
+  Home Assistant ask for the password again. The update is retried, and the password is only asked for after
+  three failed sign-ins in a row.
+- No longer logs "closes the Home Assistant aiohttp session" after setup, re-authentication or a reload.
+
 ## 1.2.0 (2026-11-04)
 
 - Moved to its own repository, [HA-Marketplace-National-Grid](https://github.com/soullink9/HA-Marketplace-National-Grid), so it can be installed and updated

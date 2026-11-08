@@ -43,6 +43,7 @@ from py_nationalgrid import (
 )
 
 from .const import (
+    AUTH_FAILURES_BEFORE_REAUTH,
     DOMAIN,
     EPOCH,
     FILL_GRACE,
@@ -115,6 +116,7 @@ class NationalGridCoordinator(DataUpdateCoordinator):
         super().__init__(hass, _LOGGER, config_entry=entry, name=DOMAIN, update_interval=QUARTER)
         config = NationalGridConfig(username=entry.data[CONF_USERNAME], password=entry.data[CONF_PASSWORD])
         # National Grid's sign-in needs cookies stored unquoted, which create_cookie_jar() sets up.
+        # Home Assistant detaches this session itself when the entry is unloaded or Home Assistant stops.
         self.session = async_create_clientsession(hass, cookie_jar=create_cookie_jar())
         self.api = NationalGridClient(config, session=self.session)
         self.meters: dict[str, dict] = {}  # service point -> meter details plus premise, account and customer numbers
@@ -125,6 +127,7 @@ class NationalGridCoordinator(DataUpdateCoordinator):
         # "Long ago", so the first poll fetches bill history and is allowed to ask for settled data.
         self._rates_checked = datetime.min.replace(tzinfo=UTC)
         self._settled_retry = datetime.min.replace(tzinfo=UTC)  # don't ask for settled data again before this
+        self._auth_failures = 0  # polls in a row whose sign-in failed
 
     async def _async_update_data(self):
         """Run one poll: find meters, refresh rates when due, then update every meter's statistics."""
@@ -144,9 +147,19 @@ class NationalGridCoordinator(DataUpdateCoordinator):
             for service_point, meter in self.meters.items():
                 data[service_point] = await self._update_meter(service_point, meter)
         except InvalidAuthError as err:
-            raise ConfigEntryAuthFailed(err) from err  # makes Home Assistant ask for the password again
+            # The library reports National Grid's server errors as a wrong password too, so a single failure is
+            # retried at the next poll. Only repeated failures make Home Assistant ask for the password again.
+            self._auth_failures += 1
+            if self._auth_failures >= AUTH_FAILURES_BEFORE_REAUTH:
+                self._auth_failures = 0
+                raise ConfigEntryAuthFailed(err) from err
+            raise UpdateFailed(
+                f"National Grid sign-in failed ({self._auth_failures} of {AUTH_FAILURES_BEFORE_REAUTH} tries before "
+                f"asking for the password again): {err}"
+            ) from err
         except NET_ERRORS as err:
             raise UpdateFailed(err) from err  # logged, and tried again at the next poll
+        self._auth_failures = 0
         # Remember that the full history is in, so restarts don't import it again.
         if entry.data.get("history") != HISTORY_VERSION and self._history_done >= set(self.meters):
             self.hass.config_entries.async_update_entry(entry, data={**entry.data, "history": HISTORY_VERSION})

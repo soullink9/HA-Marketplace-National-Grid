@@ -17,7 +17,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Sign in, run the first update (which imports history on a new install) and create the sensors."""
     coordinator = NationalGridCoordinator(hass, entry)
     entry.runtime_data = coordinator
-    entry.async_on_unload(coordinator.session.close)  # free the web session when the entry is removed or reloaded
     await coordinator.async_config_entry_first_refresh()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

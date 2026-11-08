@@ -26,6 +26,11 @@ skipped. Check National Grid's website shows interval (15-minute or hourly) usag
 National Grid stopped accepting the saved password (you changed it, for example). Open the notice and enter the
 current password. Updates stop until you do, so the account isn't locked by repeated failed sign-ins.
 
+A single failed sign-in doesn't show this notice: National Grid's sign-in page sometimes has a server error
+(`Failed to post credentials. Status: 500` in the log), which the library can't tell apart from a wrong password.
+The integration tries again at the next poll, and only asks for the password after three failed polls in a row
+(about 45 minutes).
+
 ## The statistics aren't in the Energy dashboard's list
 
 - On a new install, wait for the history import to finish (a few minutes).

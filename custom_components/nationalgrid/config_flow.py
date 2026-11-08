@@ -21,7 +21,9 @@ class NationalGridConfigFlow(ConfigFlow, domain=DOMAIN):
         """Show the form, then try to sign in with what was entered."""
         errors = {}
         if user_input:
-            session = async_create_clientsession(self.hass, cookie_jar=create_cookie_jar())
+            # A session just for this check. Home Assistant doesn't let integrations close its sessions (close() only
+            # logs a warning), so it's created without automatic cleanup and detached when the check is done.
+            session = async_create_clientsession(self.hass, auto_cleanup=False, cookie_jar=create_cookie_jar())
             try:
                 client = NationalGridClient(NationalGridConfig(**user_input), session=session)
                 await client.get_linked_accounts()  # signs in; fails on a wrong email or password
@@ -36,7 +38,7 @@ class NationalGridConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(title=user_input[CONF_USERNAME], data=user_input)
             finally:
-                await session.close()  # this session was only for the sign-in check
+                session.detach()
         return self.async_show_form(step_id="user", data_schema=SCHEMA, errors=errors)
 
     async def async_step_reauth(self, entry_data):

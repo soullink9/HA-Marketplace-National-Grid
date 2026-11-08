@@ -30,5 +30,8 @@ RATES_EVERY = timedelta(hours=12)
 # After the settled-data request fails, wait this long before asking again (longer when nothing came back at all).
 RETRY_AFTER_ERROR = timedelta(hours=1)
 RETRY_AFTER_EMPTY = timedelta(hours=6)
+# Polls in a row whose sign-in must fail before Home Assistant asks for the password again. py-nationalgrid reports
+# any failed sign-in as a wrong password, including National Grid's own server errors (HTTP 500), which pass.
+AUTH_FAILURES_BEFORE_REAUTH = 3
 # A recent hour still missing intervals is left for later until this long after the newest reading.
 FILL_GRACE = timedelta(hours=3)

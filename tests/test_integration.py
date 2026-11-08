@@ -11,6 +11,9 @@ to Sept 1. Along the way it meets:
   * a new bill arriving mid-month (its period must be repriced)
   * solar export every midday
 
+Separately, it checks that a failed sign-in (which py-nationalgrid also reports for National Grid's own server
+errors) only asks for the password again once it has failed on several polls in a row.
+
 At the end every statistic must be continuous, its running totals must add up, settled hours must match the
 truth exactly, and every cost must equal energy x that hour's rate. Exits with 1 if anything is wrong.
 """
@@ -218,9 +221,47 @@ def check(coordinator):
     )
 
 
+class SignInFails:
+    """A National Grid whose sign-in fails while `failing` is True, as py-nationalgrid reports an HTTP 500."""
+
+    def __init__(self):
+        self.failing = True
+
+    async def get_linked_accounts(self):
+        if self.failing:
+            raise stubs.InvalidAuthError("Invalid username or password")
+        return []  # no meters: nothing is written to the statistics
+
+
+async def check_sign_in_failures():
+    """Sign-in failures are retried, and only the third in a row asks for the password again."""
+    coordinator = start_home_assistant()
+    coordinator.api = SignInFails()
+
+    async def poll():
+        try:
+            await coordinator._async_update_data()
+        except stubs.UpdateFailed:
+            return "retry"
+        except stubs.InvalidAuthError:  # ConfigEntryAuthFailed
+            return "reauth"
+        return "ok"
+
+    results = [await poll(), await poll()]
+    coordinator.api.failing = False
+    results.append(await poll())  # a good sign-in starts the count again
+    coordinator.api.failing = True
+    results += [await poll(), await poll(), await poll()]
+    expected = ["retry", "retry", "ok", "retry", "retry", "reauth"]
+    if results != expected:
+        PROBLEMS.append(f"sign-in failures gave {results}, not {expected}")
+    return ", ".join(results)
+
+
 if __name__ == "__main__":
     coordinator, failures = asyncio.run(simulate())
     print(check(coordinator))
+    print(f"sign-in failures, poll by poll: {asyncio.run(check_sign_in_failures())}")
     print(f"update failures (expected during the outage): {len(failures)}")
     for problem in PROBLEMS[:25]:
         print("PROBLEM:", problem)
