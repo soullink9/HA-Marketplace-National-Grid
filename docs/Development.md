@@ -16,8 +16,13 @@ custom_components/nationalgrid/
   translations/en.json   form text
   brand/             icon.png, icon@2x.png
 tests/
+  README.md          what each test checks
   stubs.py           stand-ins for the parts of Home Assistant the integration uses
   test_integration.py  nine days against a fake National Grid
+  test_release.py    the release scripts, publishing against a fake Gitea
+scripts/             the release helpers both release workflows use (see Tests and releases below)
+.gitea/workflows/    tests and releases on Gitea, the main copy (no GitHub needed)
+.github/workflows/   GitHub's checks (hassfest, the Marketplace's) and its copy of each release
 docs/   these pages
 ```
 
@@ -55,13 +60,33 @@ the config entry's data under `history`.
 
 ```sh
 python3 tests/test_integration.py
+python3 tests/test_release.py
+python3 scripts/build_package.py
 ```
 
-Plain Python 3.13, nothing to install. It polls every 15 minutes from a fresh install through nine days that include
+The simulation is plain Python 3.13, nothing to install. It polls every 15 minutes from a fresh install through nine days that include
 the end of daylight saving time, a meter outage only settled data knows about, outages of the settled service and of
 everything, Home Assistant off for 36 hours and restarted from scratch, a new bill mid-month, and solar export. At the
 end every statistic must be continuous, running totals must add up, settled hours must match the truth exactly, and
 every cost must equal energy × that hour's rate. It prints `all checks passed` when all is well.
 
 The stand-ins can't prove the integration works with real Home Assistant or real National Grid data; try changes
-on a real installation too. CI also runs `ruff` and Home Assistant's `hassfest`.
+on a real installation too. Gitea's runner and GitHub also run `ruff`, the release tests and the zip build; GitHub adds
+Home Assistant's `hassfest` and the Marketplace's checks.
+
+## Tests and releases: the files
+
+Gitea is the main copy of this repository; it push-mirrors to GitHub, the public copy people install from.
+
+| File | What it does |
+|---|---|
+| `.gitea/workflows/test.yml` | Runs every check on each push to Gitea (lint, the tests and building the zip, on Python 3.14), with no actions downloaded from GitHub |
+| `.gitea/workflows/release.yml` | Publishes a release on Gitea (Run workflow button, or a pushed version tag); its tag then reaches GitHub through the push mirror |
+| `.github/workflows/release.yml` | Publishes the same release on GitHub when a version tag arrives there (or from its own Run workflow button): the copy the Marketplace installs from |
+| `.github/workflows/ci.yml` | GitHub's checks on every push: lint, the tests and Home Assistant's `hassfest` (which comes from GitHub, so it runs only there) |
+| `.github/workflows/validate.yml` | The Marketplace's own checks (the HACS action), which its catalog requires; GitHub only, for the same reason |
+| `scripts/release_notes.py` | Shared by both release workflows: checks the version, gives the release's title, writes the notes (install steps with the zip's address on GitHub, then the changelog section) |
+| `scripts/build_package.py` | Builds `dist/nationalgrid.zip`, the same bytes every time, and checks it with `check_package.py` |
+| `scripts/check_package.py` | Checks the zip the way it gets installed: one `nationalgrid/` folder, a manifest for that domain at the repository's version, the icon, exactly the integration's files |
+| `scripts/publish_gitea_release.py` | Creates or updates the Gitea release and uploads its files, through Gitea's API (standard library only) |
+| `tests/test_release.py` | Tests all four scripts, publishing against a fake Gitea server |
