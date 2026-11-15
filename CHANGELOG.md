@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.1 (2026-11-15)
 
 - Updated py-nationalgrid to 0.6.8. When National Grid stops accepting the saved password (say, after it was
   changed on their website), Home Assistant now asks for it again, instead of logging a failed update at every poll.
