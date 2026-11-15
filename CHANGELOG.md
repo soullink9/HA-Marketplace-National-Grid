@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Updated py-nationalgrid to 0.6.8. When National Grid stops accepting the saved password (say, after it was
+  changed on their website), Home Assistant now asks for it again, instead of logging a failed update at every poll.
+
 ### Repository
 
 - Gitea is the main copy: its runner checks every push and publishes releases (`.gitea/workflows/`), with nothing
