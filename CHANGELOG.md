@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.3.0 (2026-11-15)
+
+**Needs Home Assistant 2026.11 or newer.** On an older version the Marketplace keeps offering 1.2.1.
+
+- When National Grid stops accepting the saved password, the sign-in form now asks only for the new password, for
+  the same email. A different login can no longer replace the entry by mistake.
+- Adding a login that's already set up stops straight away, without signing in to National Grid first.
+- Meters are found once when the integration starts, before the first update. If National Grid can't be reached
+  then, Home Assistant retries the setup on its own.
+- Sensor names now come from the translations, as Home Assistant expects. Entity IDs, unique IDs and statistic IDs
+  are unchanged, so the Energy dashboard keeps its history.
+
+### Repository
+
+- Targets only the latest Home Assistant (2026.11): `hacs.json`, the README and the workflows say so, and code kept
+  only for older versions is gone. The setup form uses Probatio, Home Assistant's validation library since 2026.9,
+  instead of the `voluptuous` name that only remains as a compatibility alias. The "re-authentication successful"
+  text is no longer shipped, because Home Assistant now translates it itself.
+- Typed config entry, coordinator and sensor setup, the typed `DeviceInfo`, and `PARALLEL_UPDATES` for the sensors.
+
 ## 1.2.1 (2026-11-15)
 
 - Updated py-nationalgrid to 0.6.8. When National Grid stops accepting the saved password (say, after it was
