@@ -8,13 +8,22 @@ Unique IDs are "<service point>_<key>": changing a key would create new entities
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.const import UnitOfEnergy, UnitOfPower
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .coordinator import NationalGridConfigEntry, NationalGridCoordinator
+
+# The coordinator fetches everything; the sensors only read what it has, so they never need to wait on each other.
+PARALLEL_UPDATES = 0
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
+async def async_setup_entry(
+    hass: HomeAssistant, entry: NationalGridConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback
+) -> None:
     """Create the four sensors for every meter the coordinator found."""
     coordinator = entry.runtime_data
     sensors = []
@@ -24,22 +33,23 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(sensors)
 
 
-class NationalGridSensor(CoordinatorEntity, SensorEntity):
+class NationalGridSensor(CoordinatorEntity[NationalGridCoordinator], SensorEntity):
     """Shared base: one device per meter, and access to that meter's real-time reads."""
 
     _attr_has_entity_name = True
-    key = ""  # set by each sensor; part of the unique ID
+    key = ""  # set by each sensor; part of the unique ID, and its name's key in translations/en.json
 
-    def __init__(self, coordinator, service_point):
+    def __init__(self, coordinator: NationalGridCoordinator, service_point: str) -> None:
         """Attach the sensor to its meter's device."""
         super().__init__(coordinator)
         self.service_point = service_point
         self._attr_unique_id = f"{service_point}_{self.key}"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, service_point)},
-            "name": f"National Grid {service_point}",
-            "manufacturer": "National Grid",
-        }
+        self._attr_translation_key = self.key
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, service_point)},
+            name=f"National Grid {service_point}",
+            manufacturer="National Grid",
+        )
 
     @property
     def reads(self):
@@ -58,7 +68,7 @@ class GridPowerSensor(NationalGridSensor):
     That sign convention is what the Energy dashboard's "Standard" power measurement type expects.
     """
 
-    key, _attr_name = "power", "Grid power"
+    key = "power"
     _attr_device_class = SensorDeviceClass.POWER
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
@@ -83,7 +93,7 @@ class GridPowerSensor(NationalGridSensor):
 class EnergyTodaySensor(NationalGridSensor):
     """Energy imported from the grid today, from real-time reads. Resets at midnight."""
 
-    key, _attr_name = "energy_today", "Energy imported today"
+    key = "energy_today"
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
@@ -97,7 +107,7 @@ class EnergyTodaySensor(NationalGridSensor):
 class CostTodaySensor(NationalGridSensor):
     """Approximate cost of today's imported energy, at the effective rate. Unknown until bills are fetched."""
 
-    key, _attr_name = "cost_today", "Cost today"
+    key = "cost_today"
     _attr_device_class = SensorDeviceClass.MONETARY
 
     @property
@@ -116,7 +126,7 @@ class CostTodaySensor(NationalGridSensor):
 class RateSensor(NationalGridSensor):
     """All-in cost per kWh, blended over the last three bills (total charges ÷ kWh)."""
 
-    key, _attr_name = "rate", "Effective rate"
+    key = "rate"
     _attr_suggested_display_precision = 4
 
     @property

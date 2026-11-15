@@ -4,6 +4,11 @@
       "user": {
         "title": "National Grid",
         "data": { "username": "Email", "password": "Password" }
+      },
+      "reauth_confirm": {
+        "title": "Sign in to National Grid again",
+        "description": "National Grid no longer accepts the saved password for {username}. Enter the current one.",
+        "data": { "password": "Password" }
       }
     },
     "error": {
@@ -11,8 +16,15 @@
       "cannot_connect": "Could not reach National Grid."
     },
     "abort": {
-      "already_configured": "This account is already configured.",
-      "reauth_successful": "Re-authentication was successful."
+      "already_configured": "This account is already configured."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "power": { "name": "Grid power" },
+      "energy_today": { "name": "Energy imported today" },
+      "cost_today": { "name": "Cost today" },
+      "rate": { "name": "Effective rate" }
     }
   }
 }

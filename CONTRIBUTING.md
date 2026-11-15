@@ -28,8 +28,8 @@ The [Development](docs/Development.md) page has the full file map. The usual pla
 | How usage is fetched and written to the Energy dashboard statistics | `coordinator.py`: `_update_meter` and its seven step methods |
 | How cost rates are worked out from bills | `coordinator.py`, `_update_rates` and `rate` |
 | Which meters are included | `coordinator.py`, `_find_meters` |
-| The sensors | `sensor.py` |
-| The setup and re-authentication form | `config_flow.py`, with its text in `translations/en.json` |
+| The sensors | `sensor.py`, with their names in `translations/en.json` (under `entity.sensor.<key>`) |
+| The setup and re-authentication forms | `config_flow.py`, with their text in `translations/en.json` |
 | The icon | `brand/icon.png` (256×256) and `brand/icon@2x.png` (512×512), drawn from `docs/images/icon.svg` |
 
 **Rebuilding everyone's history:** if a change means stored hours are wrong (not just future ones), bump
@@ -37,7 +37,7 @@ The [Development](docs/Development.md) page has the full file map. The usual pla
 
 ## Checking a change
 
-You need Python 3.13 or newer (Home Assistant 2026.9 itself runs on 3.14, which is what the workflows use). Nothing
+You need Python 3.13 or newer (Home Assistant 2026.11 itself runs on 3.14, which is what the workflows use). Nothing
 else is needed for the simulation; `ruff` is the only tool to install.
 
 | Command | When |
@@ -102,7 +102,9 @@ exits non-zero if any check fails.
 ### The Marketplace
 
 `hacs.json` at the root is the Marketplace's file: the name it lists and the oldest Home Assistant version the
-integration works with. Keep that version in step with the README's requirements.
+integration works with. The integration targets only the latest Home Assistant release: when a new one comes out,
+raise that version to it, keep it in step with the README's requirements, and remove anything kept only for older
+versions rather than adding compatibility code.
 
 ## Commits
 

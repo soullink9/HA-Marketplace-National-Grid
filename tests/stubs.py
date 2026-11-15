@@ -81,7 +81,10 @@ class _Recorder:
 
 # ---------- Home Assistant ----------
 class DataUpdateCoordinator:
-    """Only what the integration uses: hass and config_entry. Tests call _async_update_data() themselves."""
+    """Only what the integration uses: hass and config_entry. Tests call _async_setup() and _async_update_data()
+    themselves, as Home Assistant does."""
+
+    __class_getitem__ = classmethod(lambda cls, item: cls)
 
     def __init__(self, hass, logger, config_entry=None, **kwargs):
         self.hass, self.config_entry, self.data = hass, config_entry, None
@@ -89,6 +92,8 @@ class DataUpdateCoordinator:
 
 class CoordinatorEntity:
     """Only what the sensors use."""
+
+    __class_getitem__ = classmethod(lambda cls, item: cls)
 
     def __init__(self, coordinator):
         self.coordinator = coordinator
@@ -143,6 +148,8 @@ def install():
     _module("homeassistant.core", HomeAssistant=object)
     _module("homeassistant.exceptions", ConfigEntryAuthFailed=InvalidAuthError)
     _module("homeassistant.helpers")
+    _module("homeassistant.helpers.device_registry", DeviceInfo=dict)
+    _module("homeassistant.helpers.entity_platform", AddConfigEntryEntitiesCallback=object)
     _module("homeassistant.helpers.aiohttp_client", async_create_clientsession=lambda *args, **kwargs: None)
     _module(
         "homeassistant.helpers.update_coordinator",

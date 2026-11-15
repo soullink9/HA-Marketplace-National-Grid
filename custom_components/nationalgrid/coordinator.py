@@ -16,6 +16,7 @@ rewritten too, so the running totals always add up.
 """
 
 from collections import defaultdict
+from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 import logging
 
@@ -27,7 +28,9 @@ from homeassistant.components.recorder.statistics import (
     get_last_statistics,
     statistics_during_period,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, UnitOfEnergy
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -61,6 +64,19 @@ _LOGGER = logging.getLogger(__name__)
 
 # Errors that mean "National Grid couldn't be reached or answered badly": the update is retried next poll.
 NET_ERRORS = (CannotConnectError, NationalGridError, ClientError, TimeoutError)
+
+type NationalGridConfigEntry = ConfigEntry[NationalGridCoordinator]
+
+
+@contextmanager
+def _translate_errors():
+    """Turn National Grid's errors into the ones Home Assistant acts on."""
+    try:
+        yield
+    except InvalidAuthError as err:
+        raise ConfigEntryAuthFailed(err) from err  # makes Home Assistant ask for the password again
+    except NET_ERRORS as err:
+        raise UpdateFailed(err) from err  # logged, and tried again at the next poll (or setup is retried)
 
 
 def _local(value):
@@ -107,11 +123,13 @@ class RealtimeHour:
         return self.covered >= HOUR
 
 
-class NationalGridCoordinator(DataUpdateCoordinator):
+class NationalGridCoordinator(DataUpdateCoordinator[dict[str, list[dict]]]):
     """One per National Grid login. Polls every 15 minutes; `data` maps each meter to its recent real-time reads."""
 
-    def __init__(self, hass, entry):
-        """Set up the National Grid client. Meters are discovered on the first update."""
+    config_entry: NationalGridConfigEntry
+
+    def __init__(self, hass: HomeAssistant, entry: NationalGridConfigEntry) -> None:
+        """Set up the National Grid client. Meters are found in _async_setup, before the first update."""
         super().__init__(hass, _LOGGER, config_entry=entry, name=DOMAIN, update_interval=QUARTER)
         config = NationalGridConfig(username=entry.data[CONF_USERNAME], password=entry.data[CONF_PASSWORD])
         # National Grid's sign-in needs cookies stored unquoted, which create_cookie_jar() sets up.
@@ -126,12 +144,15 @@ class NationalGridCoordinator(DataUpdateCoordinator):
         self._rates_checked = datetime.min.replace(tzinfo=UTC)
         self._settled_retry = datetime.min.replace(tzinfo=UTC)  # don't ask for settled data again before this
 
-    async def _async_update_data(self):
-        """Run one poll: find meters, refresh rates when due, then update every meter's statistics."""
+    async def _async_setup(self) -> None:
+        """Find the meters, once per start: Home Assistant runs this just before the first update."""
+        with _translate_errors():
+            await self._find_meters()
+
+    async def _async_update_data(self) -> dict[str, list[dict]]:
+        """Run one poll: refresh rates when due, then update every meter's statistics."""
         entry = self.config_entry
-        try:
-            if not self.meters:
-                await self._find_meters()
+        with _translate_errors():
             if dt_util.utcnow() - self._rates_checked > RATES_EVERY:
                 await self._update_rates()
             today = dt_util.now().date()
@@ -143,10 +164,6 @@ class NationalGridCoordinator(DataUpdateCoordinator):
             data = {}
             for service_point, meter in self.meters.items():
                 data[service_point] = await self._update_meter(service_point, meter)
-        except InvalidAuthError as err:
-            raise ConfigEntryAuthFailed(err) from err  # makes Home Assistant ask for the password again
-        except NET_ERRORS as err:
-            raise UpdateFailed(err) from err  # logged, and tried again at the next poll
         # Remember that the full history is in, so restarts don't import it again.
         if entry.data.get("history") != HISTORY_VERSION and self._history_done >= set(self.meters):
             self.hass.config_entries.async_update_entry(entry, data={**entry.data, "history": HISTORY_VERSION})
@@ -157,6 +174,7 @@ class NationalGridCoordinator(DataUpdateCoordinator):
 
         Gas meters and meters without AMI (smart meter) data are skipped: they have no real-time reads.
         """
+        self.meters = {}
         for link in await self.api.get_linked_accounts():
             account_id = link["billingAccountId"]
             account = await self.api.get_billing_account(account_id)

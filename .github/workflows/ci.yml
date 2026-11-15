@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # Home Assistant 2026.9 runs on Python 3.14 and supports nothing older, so that's what the tests run on
+      # Home Assistant 2026.11 runs on Python 3.14 and supports nothing older, so that's what the tests run on
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"

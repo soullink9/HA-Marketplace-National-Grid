@@ -144,13 +144,15 @@ def start_home_assistant():
 
 async def simulate():
     """Poll every 15 minutes through the scenario, checking the sensors after each update."""
-    coordinator, failures, today_seen = start_home_assistant(), [], {}
     stubs.CLOCK["now"] = START
+    coordinator, failures, today_seen = start_home_assistant(), [], {}
+    await coordinator._async_setup()
     while now() < END:
         if HA_OFF[0] <= now() < HA_OFF[1]:
             stubs.CLOCK["now"] += QUARTER
             if now() >= HA_OFF[1]:
                 coordinator = start_home_assistant()
+                await coordinator._async_setup()
             continue
         try:
             coordinator.data = await coordinator._async_update_data()

@@ -11,9 +11,9 @@ custom_components/nationalgrid/
   const.py           the domain, the statistic keys, and every timing (poll, settle window, retries)
   coordinator.py     everything that talks to National Grid and writes the statistics
   sensor.py          the four sensors per meter
-  config_flow.py     the sign-in form, also used for re-authentication
+  config_flow.py     the sign-in form, and the password form for re-authentication
   manifest.json      metadata, version and the pinned py-nationalgrid
-  translations/en.json   form text
+  translations/en.json   form text and sensor names
   brand/             icon.png, icon@2x.png
 tests/
   README.md          what each test checks

@@ -32,10 +32,10 @@ Not affiliated with or endorsed by National Grid, whose name is its trademark. T
 
 ## Install
 
-**Needs:** Home Assistant 2026.9 or newer, a [National Grid online account](https://www.nationalgridus.com/), and
+**Needs:** Home Assistant 2026.11 or newer, a [National Grid online account](https://www.nationalgridus.com/), and
 an electric smart meter. Gas meters, and electric meters without smart meter data, aren't supported.
 
-1. **Download.** Install **National Grid** from the Marketplace (**Settings → Marketplace**, Home Assistant 2026.11 and newer), or copy the [`custom_components/nationalgrid`](custom_components/nationalgrid) folder into `/config/custom_components/` and restart Home Assistant.
+1. **Download.** Install **National Grid** from the Marketplace (**Settings → Marketplace**), or copy the [`custom_components/nationalgrid`](custom_components/nationalgrid) folder into `/config/custom_components/` and restart Home Assistant.
 2. **Sign in.** Press the button above, or go to **Settings → Devices & services → Add integration → National Grid**, and enter the email and password you use on National Grid's website. The first start imports your history, which can take a few minutes.
 3. **Connect the Energy dashboard.** The [Energy Dashboard](docs/Energy-Dashboard.md) page shows what to pick for each field.
 

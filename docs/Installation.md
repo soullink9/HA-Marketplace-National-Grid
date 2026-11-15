@@ -1,6 +1,6 @@
 # Installation
 
-**Needs:** Home Assistant 2026.9 or newer, a [National Grid online account](https://www.nationalgridus.com/) (the
+**Needs:** Home Assistant 2026.11 or newer, a [National Grid online account](https://www.nationalgridus.com/) (the
 email and password you use on National Grid's website), and an **electric smart meter**. Gas meters, and electric
 meters without smart meter data, are skipped.
 
@@ -57,7 +57,8 @@ Because this integration imports your full history, you don't lose past data by 
 ## Changing your password
 
 When National Grid stops accepting the saved password, Home Assistant shows a **Reconfiguration required** notice.
-Open it and enter the new password. The integration doesn't keep retrying a rejected password.
+Open it and enter the new password (the email stays the same). The integration doesn't keep retrying a rejected
+password.
 
 ## Updating
 
