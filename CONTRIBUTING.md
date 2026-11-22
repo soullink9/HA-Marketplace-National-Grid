@@ -44,8 +44,9 @@ else is needed for the simulation; `ruff` is the only tool to install.
 |---|---|
 | `ruff check custom_components tests` and `ruff format custom_components tests` | every change |
 | `python3 tests/test_integration.py` | every change (takes a few seconds) |
+| `python3 tests/test_bad_data.py` | any change to `coordinator.py` or `sensor.py` |
 | `python3 tests/test_release.py` | any change to `scripts/` or the release workflows |
-| `python3 scripts/build_package.py` | before a release: builds `dist/nationalgrid.zip` and checks it installs |
+| `python3 scripts/build_package.py` | before a release: builds `dist/nationalgrid.zip` and its `SHA256SUMS`, and checks the zip installs |
 
 The simulation runs the real integration code against stand-ins for Home Assistant (`tests/stubs.py`) and a fake
 National Grid, polling every 15 minutes for nine days through a daylight saving change, outages, a Home Assistant

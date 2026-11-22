@@ -28,7 +28,9 @@ NAME = "National Grid"  # the name the Marketplace lists it under
 ZIP = f"{DOMAIN}.zip"  # the same name in every release, so .../releases/latest/download/<ZIP> always works
 # Every other place that carries the version, as (file, pattern whose first group is the version).
 VERSION_FILES = []
-EXTRA_ASSETS = []  # files published next to the zip, as (file name, what it is for)
+EXTRA_ASSETS = [  # files published next to the zip, as (file name, what it is for)
+    ("SHA256SUMS", f"the SHA-256 checksum of {ZIP}; to check a download, run `sha256sum -c SHA256SUMS` next to it"),
+]
 
 
 def project_versions():

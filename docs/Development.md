@@ -19,6 +19,7 @@ tests/
   README.md          what each test checks
   stubs.py           stand-ins for the parts of Home Assistant the integration uses
   test_integration.py  nine days against a fake National Grid
+  test_bad_data.py   numbers that aren't numbers, and errors carrying account details
   test_release.py    the release scripts, publishing against a fake Gitea
 scripts/             the release helpers both release workflows use (see Tests and releases below)
 .gitea/workflows/    tests and releases on Gitea, the main copy (no GitHub needed)
@@ -60,6 +61,7 @@ the config entry's data under `history`.
 
 ```sh
 python3 tests/test_integration.py
+python3 tests/test_bad_data.py
 python3 tests/test_release.py
 python3 scripts/build_package.py
 ```
@@ -86,8 +88,17 @@ Gitea is the main copy of this repository; it push-mirrors to GitHub, the public
 | `.github/workflows/ci.yml` | GitHub's checks on every push: lint, the tests and Home Assistant's `hassfest` (which comes from GitHub, so it runs only there) |
 | `.github/workflows/validate.yml` | The Marketplace's own checks (the HACS action), which its catalog requires; GitHub only, for the same reason |
 | `scripts/release_notes.py` | Shared by both release workflows: checks the version, gives the release's title, writes the notes (install steps with the zip's address on GitHub, then the changelog section) |
-| `scripts/build_package.py` | Builds `dist/nationalgrid.zip`, the same bytes every time, and checks it with `check_package.py` |
+| `scripts/build_package.py` | Builds `dist/nationalgrid.zip`, the same bytes every time, and `dist/SHA256SUMS` (its checksum, published with it), and checks the zip with `check_package.py` |
 | `scripts/check_package.py` | Checks the zip the way it gets installed: one `nationalgrid/` folder, a manifest for that domain at the repository's version, the icon, exactly the integration's files |
-| `scripts/publish_gitea_release.py` | Creates or updates the Gitea release and uploads its files, through Gitea's API (standard library only) |
+| `scripts/publish_gitea_release.py` | Creates or updates the Gitea release and uploads its files, through Gitea's API (standard library only). Sends the token only to an `https://` address (or `http://` to a local one), follows no redirects, uploads only `nationalgrid.zip` and `SHA256SUMS`, and never prints Gitea's replies |
 | `scripts/plan_github_releases.py` | Used by the GitHub release workflow: lists the version tags GitHub has no published release for yet, oldest first, and which one becomes "Latest" (standard library only) |
 | `tests/test_release.py` | Tests all five scripts, publishing against a fake Gitea server |
+
+**What each workflow may do.** Jobs that run checks get a read-only token, and their checkouts don't keep it. Only
+the job that publishes a release may write, and only its publish step gets the release token; on GitHub that job
+installs nothing, rebuilds from the tag and refuses to publish unless its `SHA256SUMS` matches what the check job
+built. The two third-party actions (`hacs/action` and `home-assistant/actions/hassfest`) are pinned to a reviewed
+commit, with the branch and date in a comment. To update one, look over what changed upstream since that commit,
+then put the new commit's full SHA in its place (`git ls-remote https://github.com/hacs/action main`). Both actions
+pull their own Docker image (`ghcr.io/hacs/action:main`, `ghcr.io/home-assistant/hassfest`), which the pin doesn't
+cover; neither job has a token that can write.

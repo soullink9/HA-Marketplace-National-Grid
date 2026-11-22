@@ -1,4 +1,4 @@
-# Publishes a release on Gitea: nationalgrid.zip, with notes from that version's section of CHANGELOG.md.
+# Publishes a release on Gitea: nationalgrid.zip and its SHA256SUMS, with notes from that version's section of CHANGELOG.md.
 #
 # Two ways to start it:
 #   - Actions tab → Release → Run workflow, and enter the version (1.2.1). This also creates the tag (v1.2.1) on
@@ -28,12 +28,18 @@ env:
   PUBLIC_REPOSITORY: soullink9/HA-Marketplace-National-Grid
   # Gitea's address as the job containers can reach it, if that isn't its public address (ROOT_URL): for a runner
   # next to Gitea, e.g. http://gitea-server:3000. Set it once as an Actions variable on your user or organisation.
+  # The publish step sends the release token only to an https:// address, or plain http:// to a local one (a
+  # container name, localhost or a private IP address); anything else stops the release.
   GITEA_INTERNAL_URL: ${{ vars.GITEA_INTERNAL_URL }}
 
 jobs:
   tests:
     # Home Assistant 2026.11 runs on Python 3.14 and supports nothing older, so that's what the tests run on
     runs-on: ubuntu-latest
+    # Read-only, and never given RELEASE_TOKEN: this job installs ruff from PyPI. The job's token only fetches the
+    # code and isn't kept in the checkout.
+    permissions:
+      contents: read
     container:
       image: python:3.14-bookworm
     steps:
@@ -59,6 +65,7 @@ jobs:
       - name: Tests
         run: |
           python3 tests/test_integration.py &&
+            python3 tests/test_bad_data.py &&
             python3 tests/test_release.py
 
       - name: Build nationalgrid.zip, and check it installs as custom_components/nationalgrid/
@@ -67,6 +74,10 @@ jobs:
   release:
     needs: tests
     runs-on: ubuntu-latest
+    # The only job that may write, and the only one that gets RELEASE_TOKEN (in its publish step alone). It runs
+    # nothing but git and the repository's own scripts.
+    permissions:
+      contents: write
     container:
       image: python:3.14-bookworm
     steps:
@@ -102,7 +113,7 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         run: python3 scripts/release_notes.py "$TAG" "$PUBLIC_REPOSITORY" notes.md >> "$GITHUB_OUTPUT"
 
-      - name: Build nationalgrid.zip, and check it installs as custom_components/nationalgrid/
+      - name: Build nationalgrid.zip and SHA256SUMS, and check the zip installs as custom_components/nationalgrid/
         run: python3 scripts/build_package.py
 
       - name: Publish on Gitea

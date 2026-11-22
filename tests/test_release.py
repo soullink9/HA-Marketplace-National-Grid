@@ -5,6 +5,7 @@ against a fake Gitea server. These run in both release workflows, so a mistake h
 Run:  python3 tests/test_release.py   (Python's standard library only; prints PASS/FAIL per check)
 """
 
+import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -23,6 +24,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build_package  # noqa: E402,I001  (scripts/ is put on the path just above)
 import check_package  # noqa: E402
 import plan_github_releases  # noqa: E402
+import publish_gitea_release  # noqa: E402
 import release_notes  # noqa: E402
 
 DOMAIN = "nationalgrid"
@@ -139,6 +141,12 @@ def test_package():
     first_bytes = first.read_bytes()
     check(check_package.problems_in(first) == [], f"the real build: dist/{ZIP} passes the install check")
     check(build_package.build().read_bytes() == first_bytes, "building again gives the same zip, byte for byte")
+    sums = (ROOT / "dist" / build_package.CHECKSUMS).read_text()
+    check(
+        sums == f"{hashlib.sha256(first_bytes).hexdigest()}  {ZIP}\n"
+        and sorted(path.name for path in (ROOT / "dist").iterdir()) == sorted([ZIP, build_package.CHECKSUMS]),
+        f"dist/ holds the zip and a {build_package.CHECKSUMS} in sha256sum's format, nothing else",
+    )
     good = built_files()
     check(all(name.startswith(f"{DOMAIN}/") for name in good), f"everything is inside {DOMAIN}/")
     check(not any("__pycache__" in name for name in good), "no __pycache__ in the zip")
@@ -197,7 +205,12 @@ class FakeGitea(BaseHTTPRequestHandler):
         body = self.rfile.read(length) if length else b""
         FakeGitea.calls.append((self.command, self.path, self.headers.get("Authorization")))
         if self.headers.get("Authorization") != "token secret":
-            return self.reply(401, {"message": "token is required"})
+            return self.reply(401, {"message": "token is required", "echo": "BODY-SHOULD-NOT-BE-PRINTED"})
+        if path.startswith("/api/v1/repos/owner/moved/"):  # a repository that answers with a redirect
+            self.send_response(301)
+            self.send_header("Location", path.replace("/owner/moved/", "/owner/repo/"))
+            self.send_header("Content-Length", "0")
+            return self.end_headers()
         if not path.startswith(base):
             return self.reply(404, {"message": "not found"})
         path = path[len(base) :]
@@ -243,8 +256,16 @@ def test_publish():
     server = ThreadingHTTPServer(("127.0.0.1", 0), FakeGitea)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     gitea_url = f"http://127.0.0.1:{server.server_port}"
-    files = [ROOT / "dist" / ZIP] + [ROOT / "dist" / name for _, name in build_package.EXTRA_COPIES]
-    env = {**os.environ, "GITHUB_SERVER_URL": gitea_url, "GITHUB_REPOSITORY": "owner/repo", "RELEASE_TOKEN": "secret"}
+    files = [ROOT / "dist" / ZIP, ROOT / "dist" / build_package.CHECKSUMS]
+    files += [ROOT / "dist" / name for _, name in build_package.EXTRA_COPIES]
+    # The fake Gitea is plain http on loopback, which is only accepted as GITEA_INTERNAL_URL
+    env = {
+        **os.environ,
+        "GITHUB_SERVER_URL": "https://gitea.example.invalid",
+        "GITEA_INTERNAL_URL": gitea_url,
+        "GITHUB_REPOSITORY": "owner/repo",
+        "RELEASE_TOKEN": "secret",
+    }
     notes_script(f"v{VERSION}")
     notes = (TMP / "notes.md").read_text()
 
@@ -271,6 +292,9 @@ def test_publish():
         f'…and its files uploaded byte for byte, as Gitea\'s "attachment" field ({", ".join(sorted(uploaded))})',
     )
     check(uploaded.get(ZIP, (None, None, ""))[2] == "application/zip", "the zip is sent as application/zip")
+    check(
+        uploaded.get(build_package.CHECKSUMS, (None, None, ""))[2] == "text/plain", "SHA256SUMS is sent as text/plain"
+    )
     check(all(auth == "token secret" for _, _, auth in FakeGitea.calls), "every call carries the token")
 
     result = run_publish("V1.9.0 again")
@@ -284,12 +308,57 @@ def test_publish():
 
     result = run_publish("V1.9.0", {"RELEASE_TOKEN": "wrong"})
     check(
-        result.returncode != 0 and "401" in result.stderr,
-        f"a token Gitea refuses: stops with Gitea's answer ({result.stderr.strip()[:80]})",
+        result.returncode != 0 and "401" in result.stderr and "BODY-SHOULD-NOT-BE-PRINTED" not in result.stderr,
+        f"a token Gitea refuses: stops with the status, without printing Gitea's reply ({result.stderr.strip()[:80]})",
     )
-    result = run_publish(
-        "V1.9.0 inside", {"GITHUB_SERVER_URL": "https://gitea.example.invalid", "GITEA_INTERNAL_URL": gitea_url}
+    calls_before = len(FakeGitea.calls)
+    result = run_publish("V1.9.0 moved", {"GITHUB_REPOSITORY": "owner/moved"})
+    check(
+        result.returncode != 0 and len(FakeGitea.calls) == calls_before + 1 and release["name"] != "V1.9.0 moved",
+        f"Gitea answers with a redirect: not followed, so the token goes nowhere else ({result.stderr.strip()[:80]})",
     )
+
+    # Where the token may be sent
+    calls_before = len(FakeGitea.calls)
+    refused = {
+        "public address over http": {"GITHUB_SERVER_URL": gitea_url, "GITEA_INTERNAL_URL": ""},
+        "internal address over http to a public name": {"GITEA_INTERNAL_URL": "http://gitea.example.com"},
+        "internal address over http to a public IP": {"GITEA_INTERNAL_URL": "http://8.8.8.8:3000"},
+        "a user name and password in the address": {"GITEA_INTERNAL_URL": "https://user:pw@gitea.example.com"},
+        "a query in the address": {"GITEA_INTERNAL_URL": "https://gitea.example.com/?x=1"},
+        "a fragment in the address": {"GITEA_INTERNAL_URL": "https://gitea.example.com/#x"},
+        "an address that isn't one": {"GITEA_INTERNAL_URL": "gitea.example.com"},
+        "another scheme": {"GITEA_INTERNAL_URL": "ftp://gitea.example.com"},
+    }
+    for what, extra_env in refused.items():
+        result = run_publish("V1.9.0", extra_env)
+        check(
+            result.returncode != 0 and "Not publishing" in result.stderr, f"{what}: refused ({result.stderr.strip()})"
+        )
+    check(len(FakeGitea.calls) == calls_before, "…each before any call to Gitea")
+    for url in ("https://gitea.example.com", "http://127.0.0.1:3000", "http://10.0.0.5", "http://gitea-server:3000"):
+        try:
+            accepted = publish_gitea_release.checked_server(url, "GITEA_INTERNAL_URL", allow_local_http=True) == url
+        except ValueError:
+            accepted = False
+        check(accepted, f"internal address {url}: accepted")
+
+    # What may be uploaded
+    stray = TMP / "secrets.txt"
+    stray.write_text("not a release file")
+    renamed = TMP / "evil" / ZIP
+    for what, upload in {
+        "a file that isn't a release file": files + [stray],
+        "a release file that doesn't exist": [renamed],
+        "the same file named twice": files + files[:1],
+    }.items():
+        result = run_publish("V1.9.0", upload=upload)
+        check(
+            result.returncode != 0 and "Not publishing" in result.stderr, f"{what}: refused ({result.stderr.strip()})"
+        )
+    check(len(FakeGitea.calls) == calls_before, "…each before any call to Gitea")
+
+    result = run_publish("V1.9.0 inside", {"GITHUB_SERVER_URL": "https://gitea.example.invalid"})
     check(
         result.returncode == 0 and release["name"] == "V1.9.0 inside",
         "public address unreachable from the runner: GITEA_INTERNAL_URL is used instead",

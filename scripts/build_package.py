@@ -1,14 +1,16 @@
 """Builds the release's zip of the integration, then checks it the way Home Assistant will read it.
 
 Used by both release workflows and the test workflow:  python3 scripts/build_package.py
-Writes dist/nationalgrid.zip, and exits non-zero if check_package.py finds a problem.
+Writes dist/nationalgrid.zip and dist/SHA256SUMS (its checksum, for `sha256sum -c SHA256SUMS`), and exits
+non-zero if check_package.py finds a problem.
 
 The zip holds one folder, nationalgrid/, so unzipping it into /config/custom_components/ gives Home Assistant
 /config/custom_components/nationalgrid/. Only the integration's own files go in: Python's __pycache__ folders
 (left behind by running the tests) are skipped. Files are added in a fixed order with a fixed date, so the same
-code always gives the same zip, byte for byte.
+code always gives the same zip, byte for byte, and Gitea's and GitHub's releases get the same checksum.
 """
 
+import hashlib
 from pathlib import Path
 import shutil
 import sys
@@ -23,6 +25,7 @@ SOURCE = ROOT / "custom_components" / DOMAIN
 DIST = ROOT / "dist"
 FIXED_DATE = (2020, 1, 1, 0, 0, 0)  # zip dates can't be earlier than 1980; any fixed date makes builds repeatable
 EXTRA_COPIES = []  # other files published next to the zip, as (path in the repository, name in dist/)
+CHECKSUMS = "SHA256SUMS"  # in dist/, listing every other file there, in sha256sum's format
 
 
 def integration_files():
@@ -36,8 +39,11 @@ def integration_files():
 
 
 def build():
-    """Write dist/<domain>.zip (and copy any other release files next to it); return the zip's path."""
-    DIST.mkdir(exist_ok=True)
+    """Write dist/<domain>.zip (and copy any other release files next to it), then dist/SHA256SUMS covering them;
+    return the zip's path. Anything else left in dist/ is removed, since the release workflows publish dist/*."""
+    if DIST.exists():
+        shutil.rmtree(DIST)
+    DIST.mkdir()
     zip_path = DIST / f"{DOMAIN}.zip"
     with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
         for name in integration_files():
@@ -47,6 +53,8 @@ def build():
             archive.writestr(info, (SOURCE.parent / name).read_bytes())
     for source, name in EXTRA_COPIES:
         shutil.copyfile(ROOT / source, DIST / name)
+    lines = [f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n" for path in sorted(DIST.iterdir())]
+    (DIST / CHECKSUMS).write_text("".join(lines))
     return zip_path
 
 

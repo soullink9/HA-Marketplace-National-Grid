@@ -7,6 +7,7 @@ corrupt the Energy dashboard) in PROBLEMS. The clock is CLOCK["now"], a UTC date
 
 from collections import defaultdict
 from datetime import UTC, datetime, time, timedelta
+import math
 from pathlib import Path
 import sys
 import types
@@ -51,6 +52,12 @@ def async_add_external_statistics(hass, metadata, statistics):
             PROBLEMS.append(f"invalid timestamp {start}")  # Home Assistant raises on these
         if start + timedelta(hours=1) > now():
             PROBLEMS.append(f"unfinished or future hour {start} written at {now()}")
+        if not all(isinstance(row[key], (int, float)) and math.isfinite(row[key]) for key in ("state", "sum")):
+            PROBLEMS.append(
+                f"{metadata['statistic_id']} at {start}: not a finite number ({row['state']}, {row['sum']})"
+            )
+        elif row["state"] < 0:
+            PROBLEMS.append(f"{metadata['statistic_id']} at {start}: negative ({row['state']})")
         STORE[metadata["statistic_id"]][start.timestamp()] = {"state": row["state"], "sum": row["sum"]}
 
 

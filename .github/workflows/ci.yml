@@ -9,6 +9,8 @@ on:
     - cron: "0 6 * * 1"
   workflow_dispatch:
 
+# Read-only: nothing here publishes. Checkouts don't keep the token either (persist-credentials: false), so the
+# tools these jobs install can't use it.
 permissions:
   contents: read
 
@@ -18,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
@@ -30,18 +34,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: home-assistant/actions/hassfest@master
+        with:
+          persist-credentials: false
+      # Third-party code, so pinned to a reviewed commit (the comment says which branch it was on) rather than
+      # following a branch that could change. Update it by hand now and then: hassfest's checks follow Home Assistant.
+      - uses: home-assistant/actions/hassfest@07f46fd2e19967768b5fd3000f91f857452b767c # master, 2026-11-19
 
   tests:
     name: Tests (nine-day simulation)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       # Home Assistant 2026.11 runs on Python 3.14 and supports nothing older, so that's what the tests run on
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
       - run: python tests/test_integration.py
+      - run: python tests/test_bad_data.py
       - run: python tests/test_release.py
       - name: Build nationalgrid.zip, and check it installs
         run: python scripts/build_package.py

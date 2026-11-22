@@ -13,12 +13,18 @@ install, the last few days once a day, and a bill period whenever a new bill arr
 
 Each statistic row carries a running total ("sum"). Whenever hours are rewritten, every row after them is
 rewritten too, so the running totals always add up.
+
+Numbers from National Grid are checked before any arithmetic: a value that isn't a finite number (missing, text,
+NaN or infinity) is skipped rather than written to the statistics, where it would spoil every running total after
+it. Errors are logged by type and HTTP status only, since the library's messages can carry request addresses and
+pieces of National Grid's replies (account numbers, usage).
 """
 
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 import logging
+import math
 
 from aiohttp import ClientError
 from homeassistant.components.recorder import get_instance
@@ -68,15 +74,33 @@ NET_ERRORS = (CannotConnectError, NationalGridError, ClientError, TimeoutError)
 type NationalGridConfigEntry = ConfigEntry[NationalGridCoordinator]
 
 
+def _describe(err):
+    """Name an error for the log without its message: py-nationalgrid's messages can include request addresses
+    and parts of National Grid's reply, which hold account numbers and usage."""
+    status = getattr(err, "status", None)
+    return f"{type(err).__name__} (HTTP {status})" if isinstance(status, int) else type(err).__name__
+
+
+def _finite(value):
+    """Return `value` as a float, or None if it isn't a finite number (missing, text, NaN or infinity)."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 @contextmanager
 def _translate_errors():
     """Turn National Grid's errors into the ones Home Assistant acts on."""
     try:
         yield
     except InvalidAuthError as err:
-        raise ConfigEntryAuthFailed(err) from err  # makes Home Assistant ask for the password again
+        # makes Home Assistant ask for the password again
+        raise ConfigEntryAuthFailed(f"National Grid refused the sign-in: {_describe(err)}") from err
     except NET_ERRORS as err:
-        raise UpdateFailed(err) from err  # logged, and tried again at the next poll (or setup is retried)
+        # logged, and tried again at the next poll (or setup is retried)
+        raise UpdateFailed(f"National Grid unavailable: {_describe(err)}") from err
 
 
 def _local(value):
@@ -206,9 +230,9 @@ class NationalGridCoordinator(DataUpdateCoordinator[dict[str, list[dict]]]):
             try:
                 bills = await self.api.get_electric_bill_history(account, customer)
             except Exception as err:  # noqa: BLE001 - billing being down must never stop usage tracking
-                _LOGGER.warning("Could not fetch National Grid bill history: %s", err)
+                _LOGGER.warning("Could not fetch National Grid bill history: %s", _describe(err))
                 continue
-            bills = [bill for bill in bills if (bill.get("totalKwh") or 0) > 0]  # skip bills with no usage (avoids / 0)
+            bills = self._usable_bills(bills)
             if not bills:
                 continue
             # Bills come newest first, so periods[0] is the newest bill period.
@@ -227,6 +251,20 @@ class NationalGridCoordinator(DataUpdateCoordinator[dict[str, list[dict]]]):
             recent_kwh = sum(bill["totalKwh"] for bill in recent)
             self.rates[account] = (periods, round(recent_charges / recent_kwh, 4))
         self._rates_checked = dt_util.utcnow()
+
+    @staticmethod
+    def _usable_bills(bills):
+        """The bills a rate can be worked out from, with their totals as floats: kWh must be a finite number above
+        zero (a bill with no usage would divide by zero), and charges a finite number, zero or more."""
+        usable = []
+        for bill in bills:
+            kwh, charges = _finite(bill.get("totalKwh")), _finite(bill.get("totalCharges"))
+            if kwh is None or charges is None or kwh <= 0 or charges < 0:
+                if kwh != 0:  # a bill with no usage is normal; anything else is worth a note
+                    _LOGGER.debug("Skipped a National Grid bill whose kWh or charges aren't usable")
+                continue
+            usable.append({**bill, "totalKwh": kwh, "totalCharges": charges})
+        return usable
 
     def rate(self, service_point, hour=None):
         """Return the $/kWh for an hour: its bill period's rate, or the blended rate (also when `hour` is None).
@@ -371,16 +409,25 @@ class NationalGridCoordinator(DataUpdateCoordinator[dict[str, list[dict]]]):
             )
             # Records can be hourly or 15-minute, and an hour can be partly import and partly export, so add each
             # hour up as net kWh first and split it into imported and exported at the end.
-            net_by_hour = defaultdict(float)
+            net_by_hour, unusable = defaultdict(float), set()
             for usage in usages:
                 if "T" not in str(usage["date"]):
                     continue  # a whole-day total (date only) can't be placed in an hour, so it's not used
                 hour = _hour(usage["date"])
-                if hour >= since:
-                    net_by_hour[hour] += float(usage["quantity"])
-            settled = {hour: _split(net) for hour, net in net_by_hour.items()}
+                if hour < since:
+                    continue
+                # Negative is fine (export); anything that isn't a finite number makes the whole hour unusable,
+                # since settled hours are taken as exact. Real-time or stored data covers it instead.
+                quantity = _finite(usage.get("quantity"))
+                if quantity is None:
+                    unusable.add(hour)
+                else:
+                    net_by_hour[hour] += quantity
+            if unusable:
+                _LOGGER.debug("Skipped %d settled hours with readings that aren't numbers", len(unusable))
+            settled = {hour: _split(net) for hour, net in net_by_hour.items() if hour not in unusable}
         except NET_ERRORS as err:
-            _LOGGER.warning("National Grid settled usage unavailable, using real-time data: %s", err)
+            _LOGGER.warning("National Grid settled usage unavailable, using real-time data: %s", _describe(err))
             failed = True
             self._settled_retry = now + RETRY_AFTER_ERROR
         if full and not settled:
@@ -403,6 +450,15 @@ class NationalGridCoordinator(DataUpdateCoordinator[dict[str, list[dict]]]):
             service_point,
             dt_util.as_local(start).replace(tzinfo=None),  # the API wants local time
         )
+        # A read whose value isn't a finite number is dropped (negative is fine: export), so neither the statistics
+        # nor the sensors see it. Its hour then counts as incomplete, like a missing read.
+        usable = []
+        for read in reads:
+            if (value := _finite(read.get("value"))) is not None:
+                usable.append({**read, "value": value})
+        if len(usable) < len(reads):
+            _LOGGER.debug("Skipped %d real-time reads that aren't numbers", len(reads) - len(usable))
+        reads = usable
         realtime = defaultdict(RealtimeHour)
         for read in reads:
             read["start"], read["end"] = _local(read["startTime"]), _local(read["endTime"])

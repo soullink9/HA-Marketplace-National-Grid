@@ -23,6 +23,10 @@ jobs:
   tests:
     # Home Assistant 2026.11 runs on Python 3.14 and supports nothing older, so that's what the tests run on
     runs-on: ubuntu-latest
+    # Read-only: the job's token is only used to fetch the code, and never reaches the steps after that (it isn't
+    # kept in the checkout). No release token is ever given to a test job.
+    permissions:
+      contents: read
     container:
       image: python:3.14-bookworm
     steps:
@@ -48,6 +52,7 @@ jobs:
       - name: Tests
         run: |
           python3 tests/test_integration.py &&
+            python3 tests/test_bad_data.py &&
             python3 tests/test_release.py
 
       - name: Build nationalgrid.zip, and check it installs as custom_components/nationalgrid/
