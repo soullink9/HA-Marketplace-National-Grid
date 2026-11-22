@@ -28,8 +28,9 @@ env:
   PUBLIC_REPOSITORY: soullink9/HA-Marketplace-National-Grid
   # Gitea's address as the job containers can reach it, if that isn't its public address (ROOT_URL): for a runner
   # next to Gitea, e.g. http://gitea-server:3000. Set it once as an Actions variable on your user or organisation.
-  # The publish step sends the release token only to an https:// address, or plain http:// to a local one (a
-  # container name, localhost or a private IP address); anything else stops the release.
+  # The publish step sends the release token (to this address, or to Gitea's own when this isn't set) only over
+  # https://, or plain http:// to a host on the runner's network: a container name, localhost, a private IP address
+  # or a name that resolves only to those. Anything else stops the release.
   GITEA_INTERNAL_URL: ${{ vars.GITEA_INTERNAL_URL }}
 
 jobs:

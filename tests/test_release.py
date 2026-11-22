@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -321,8 +322,7 @@ def test_publish():
     # Where the token may be sent
     calls_before = len(FakeGitea.calls)
     refused = {
-        "public address over http": {"GITHUB_SERVER_URL": gitea_url, "GITEA_INTERNAL_URL": ""},
-        "internal address over http to a public name": {"GITEA_INTERNAL_URL": "http://gitea.example.com"},
+        "public address over http": {"GITHUB_SERVER_URL": "http://8.8.8.8", "GITEA_INTERNAL_URL": ""},
         "internal address over http to a public IP": {"GITEA_INTERNAL_URL": "http://8.8.8.8:3000"},
         "a user name and password in the address": {"GITEA_INTERNAL_URL": "https://user:pw@gitea.example.com"},
         "a query in the address": {"GITEA_INTERNAL_URL": "https://gitea.example.com/?x=1"},
@@ -336,14 +336,51 @@ def test_publish():
             result.returncode != 0 and "Not publishing" in result.stderr, f"{what}: refused ({result.stderr.strip()})"
         )
     check(len(FakeGitea.calls) == calls_before, "…each before any call to Gitea")
-    for url in ("https://gitea.example.com", "http://127.0.0.1:3000", "http://10.0.0.5", "http://gitea-server:3000"):
-        try:
-            accepted = publish_gitea_release.checked_server(url, "GITEA_INTERNAL_URL", allow_local_http=True) == url
-        except ValueError:
-            accepted = False
-        check(accepted, f"internal address {url}: accepted")
+
+    result = run_publish("V1.9.0 local", {"GITHUB_SERVER_URL": gitea_url, "GITEA_INTERNAL_URL": ""})
+    check(
+        result.returncode == 0 and release["name"] == "V1.9.0 local",
+        "Gitea's own address is plain http on the runner's network, with no GITEA_INTERNAL_URL: published",
+    )
+
+    # Names are looked up: http is fine when every address a name has is on the local network
+    dns = {
+        "gitea.lan": ["192.168.1.10"],
+        "gitea.home.arpa": ["fd00::10", "10.0.0.7"],
+        "gitea.example.com": ["93.184.215.14"],
+        "split.example.com": ["192.168.1.10", "93.184.215.14"],
+    }
+
+    def fake_getaddrinfo(host, *args, **kwargs):
+        if host not in dns:
+            raise socket.gaierror("not found")
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, 0)) for address in dns[host]]
+
+    real_getaddrinfo, socket.getaddrinfo = socket.getaddrinfo, fake_getaddrinfo
+    try:
+        for url, expected in {
+            "https://gitea.example.com": True,
+            "http://127.0.0.1:3000": True,
+            "http://10.0.0.5": True,
+            "http://[::1]:3000": True,
+            "http://gitea-server:3000": True,
+            "http://gitea.lan:3000": True,
+            "http://gitea.home.arpa": True,
+            "http://gitea.example.com": False,
+            "http://split.example.com": False,
+            "http://unknown.example.com": False,
+            "http://8.8.8.8": False,
+        }.items():
+            try:
+                accepted = publish_gitea_release.checked_server(url, "GITHUB_SERVER_URL") == url
+            except ValueError:
+                accepted = False
+            check(accepted == expected, f"{url}: {'accepted' if expected else 'refused'}")
+    finally:
+        socket.getaddrinfo = real_getaddrinfo
 
     # What may be uploaded
+    calls_before = len(FakeGitea.calls)
     stray = TMP / "secrets.txt"
     stray.write_text("not a release file")
     renamed = TMP / "evil" / ZIP

@@ -8,12 +8,12 @@ GitHub's workflow uses the `gh` tool for this; Gitea has no such tool on its run
 API directly, with Python's standard library only (so it runs on any runner, with nothing to install).
 
 It reads from the environment, as Gitea's runner sets it:
-    GITHUB_SERVER_URL   the Gitea address (Gitea keeps GitHub's variable names, so workflows work on both); must
-                        be an https:// address
+    GITHUB_SERVER_URL   the Gitea address (Gitea keeps GitHub's variable names, so workflows work on both)
     GITEA_INTERNAL_URL  optional: Gitea's address as the runner's jobs reach it, used instead when set (a runner
-                        next to Gitea often can't reach its public address, ROOT_URL). https:// as well, except
-                        that http:// is accepted for an address that can't leave the runner's own network: a
-                        loopback or private IP address, or a bare container name such as http://gitea-server:3000
+                        next to Gitea often can't reach its public address, ROOT_URL)
+Either must be https://, except that http:// is accepted for an address that can't leave the runner's own network:
+a loopback, private or link-local IP address, a bare container name such as http://gitea-server:3000, or a name
+that resolves only to such addresses (http://gitea.lan).
     GITHUB_REPOSITORY   owner/repo on Gitea
     RELEASE_TOKEN       a token that may create releases (the workflow passes the job's own token)
 
@@ -29,6 +29,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import socket
 import sys
 import urllib.error
 import urllib.parse
@@ -39,29 +40,41 @@ import uuid
 ASSETS = {"nationalgrid.zip": "application/zip", "SHA256SUMS": "text/plain"}
 
 
-def checked_server(url, name, allow_local_http=False):
+def checked_server(url, name):
     """Return Gitea's address without a trailing slash, or raise ValueError if it isn't a safe place to send the
-    token: an absolute https:// address with no user name, password, query or fragment (http:// only when
-    `allow_local_http` and the host can't be outside the runner's network)."""
+    token: an absolute https:// address with no user name, password, query or fragment. Plain http:// is accepted
+    only when the host can't be outside the runner's own network (see _local_host)."""
     parsed = urllib.parse.urlsplit(url)
     if not parsed.hostname:
         raise ValueError(f"{name} must be an absolute https:// address")
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError(f"{name} must not contain a user name, password, query or fragment")
-    if parsed.scheme == "http" and allow_local_http and _local_host(parsed.hostname):
+    if parsed.scheme == "http" and _local_host(parsed.hostname):
         return url.rstrip("/")
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"{name} must be an https:// address")
     if parsed.scheme != "https":
-        raise ValueError(f"{name} must use https://" + (" (or http:// to a local address)" if allow_local_http else ""))
+        raise ValueError(
+            f"{name} is {parsed.scheme}://{parsed.hostname}, which isn't a local address: the token is only sent "
+            "over https://, or over http:// to a host on the runner's own network"
+        )
     return url.rstrip("/")
 
 
 def _local_host(host):
-    """True for a loopback or private IP address, localhost, or a bare name with no dots (a container name)."""
+    """True when `host` can only be on the runner's own network: a loopback, private or link-local IP address, a
+    bare name with no dots (a container name, localhost), or a name every address of which is one of those (say,
+    gitea.lan resolving to 192.168.1.10). A name that doesn't resolve isn't local."""
     try:
-        address = ipaddress.ip_address(host)
+        addresses = [ipaddress.ip_address(host)]
     except ValueError:
-        return "." not in host
-    return address.is_loopback or address.is_private
+        if "." not in host:
+            return True
+        try:
+            addresses = [ipaddress.ip_address(info[4][0].split("%")[0]) for info in socket.getaddrinfo(host, None)]
+        except (OSError, ValueError):
+            return False
+    return bool(addresses) and all(a.is_loopback or a.is_private or a.is_link_local for a in addresses)
 
 
 def checked_assets(file_paths):
@@ -171,7 +184,7 @@ def main():
     try:
         file_paths = checked_assets(file_paths)
         if os.environ.get("GITEA_INTERNAL_URL"):
-            server = checked_server(os.environ["GITEA_INTERNAL_URL"], "GITEA_INTERNAL_URL", allow_local_http=True)
+            server = checked_server(os.environ["GITEA_INTERNAL_URL"], "GITEA_INTERNAL_URL")
         else:
             server = checked_server(os.environ["GITHUB_SERVER_URL"], "GITHUB_SERVER_URL")
     except ValueError as e:

@@ -90,7 +90,7 @@ Gitea is the main copy of this repository; it push-mirrors to GitHub, the public
 | `scripts/release_notes.py` | Shared by both release workflows: checks the version, gives the release's title, writes the notes (install steps with the zip's address on GitHub, then the changelog section) |
 | `scripts/build_package.py` | Builds `dist/nationalgrid.zip`, the same bytes every time, and `dist/SHA256SUMS` (its checksum, published with it), and checks the zip with `check_package.py` |
 | `scripts/check_package.py` | Checks the zip the way it gets installed: one `nationalgrid/` folder, a manifest for that domain at the repository's version, the icon, exactly the integration's files |
-| `scripts/publish_gitea_release.py` | Creates or updates the Gitea release and uploads its files, through Gitea's API (standard library only). Sends the token only to an `https://` address (or `http://` to a local one), follows no redirects, uploads only `nationalgrid.zip` and `SHA256SUMS`, and never prints Gitea's replies |
+| `scripts/publish_gitea_release.py` | Creates or updates the Gitea release and uploads its files, through Gitea's API (standard library only). Sends the token only to an `https://` address (or `http://` to a host on the runner's network: a container name, a private IP, or a name that resolves only to private IPs), follows no redirects, uploads only `nationalgrid.zip` and `SHA256SUMS`, and never prints Gitea's replies |
 | `scripts/plan_github_releases.py` | Used by the GitHub release workflow: lists the version tags GitHub has no published release for yet, oldest first, and which one becomes "Latest" (standard library only) |
 | `tests/test_release.py` | Tests all five scripts, publishing against a fake Gitea server |
 
