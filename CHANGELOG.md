@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.2 (2026-11-22)
+
+### Repository
+
+- Fixes the Gitea release in 1.3.1, which stopped before publishing when Gitea's own address is plain `http://` on
+  the runner's network and `GITEA_INTERNAL_URL` isn't set. Plain `http://` is now accepted for either address when
+  the host can't be outside that network: a container name, localhost, a private IP address, or a name that
+  resolves only to private addresses (such as `gitea.lan`). Anything public still needs `https://`.
+
 ## 1.3.1 (2026-11-22)
 
 Hardening from a security review. Nothing to change in your setup.
