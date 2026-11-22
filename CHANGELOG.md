@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.3.1 (2026-11-22)
+
+Hardening from a security review. Nothing to change in your setup.
+
+- Numbers from National Grid are checked before they're used. A bill, settled reading or real-time read that holds
+  something other than a finite number (missing, text, NaN or infinity) is skipped, instead of ending up in the
+  Energy dashboard's statistics, where it would spoil every running total after it. Bills with negative charges are
+  skipped too. Negative readings are still counted as export.
+- Errors from National Grid are logged by their type and HTTP status only. The library's messages can include
+  request addresses and parts of National Grid's reply, such as account numbers.
+- Each release now includes **SHA256SUMS**, the checksum of `nationalgrid.zip`. To check a download, run
+  `sha256sum -c SHA256SUMS` in the folder that holds both.
+
+### Repository
+
+- The Marketplace's HACS action and Home Assistant's hassfest are pinned to reviewed commits instead of following a
+  branch. Every check job runs with a read-only token that its checkout doesn't keep.
+- GitHub's release workflow runs the checks in a read-only job. A separate job, the only one that can write,
+  installs nothing, rebuilds the files from the tag and publishes them only if they match what the checks built.
+- The Gitea publisher sends its token only to an `https://` address (or plain `http://` to a local
+  `GITEA_INTERNAL_URL`, such as a container name), follows no redirects, uploads only `nationalgrid.zip` and
+  `SHA256SUMS`, and no longer prints Gitea's replies.
+
 ## 1.3.0 (2026-11-15)
 
 **Needs Home Assistant 2026.11 or newer.** On an older version the Marketplace keeps offering 1.2.1.
