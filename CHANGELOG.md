@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.3 (2026-11-25)
+
+Dependency updates. Nothing changes in the integration itself, and nothing to change in your setup.
+
+- py-nationalgrid stays at 0.6.8, its latest release.
+
+### Repository
+
+- GitHub's workflows use `actions/checkout` v7 and `actions/setup-python` v7.
+- Home Assistant's hassfest is re-pinned to its latest commit (2026-11-23). The HACS action was already on its
+  latest commit.
+
 ## 1.3.2 (2026-11-22)
 
 ### Repository
