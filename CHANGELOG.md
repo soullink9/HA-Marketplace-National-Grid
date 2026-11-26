@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.4 (2026-11-26)
+
+No telemetry, anywhere. Nothing changes in the integration itself, and nothing to change in your setup.
+
+- The integration and py-nationalgrid were checked and send nothing anywhere but National Grid: no analytics,
+  usage reporting or crash reporting. `docs/Privacy.md` now says so.
+
+### Repository
+
+- The GitHub CLI, which the GitHub release workflow uses, sends usage telemetry by default. Every workflow now turns
+  it off (`GH_TELEMETRY: "false"`), along with `DO_NOT_TRACK: "1"` for any other tool that honours it, and the
+  release tests check that no workflow drops either.
+
 ## 1.3.3 (2026-11-25)
 
 Dependency updates. Nothing changes in the integration itself, and nothing to change in your setup.
