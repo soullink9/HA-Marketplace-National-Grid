@@ -467,12 +467,31 @@ def test_plan():
     check("::warning::v0.9.0" in result.stdout, "…and warns, in the run's log, about the tag it can't build")
 
 
+# --- workflows: no tool a step runs may send telemetry (the project's rule: no telemetry, ever) ---
+def test_no_telemetry():
+    """Every workflow turns telemetry off for the whole run, before any job, so no step can miss it."""
+    workflows = sorted((ROOT / ".github" / "workflows").glob("*.yml")) + sorted(
+        (ROOT / ".gitea" / "workflows").glob("*.yml")
+    )
+    check(len(workflows) == 5, f"found the five workflows ({len(workflows)})")
+    for path in workflows:
+        text = path.read_text()
+        top_env = re.search(r"^env:\n((?:[ #].*\n|\n)*?)(?=^\S)", text, re.MULTILINE)
+        body = top_env.group(1) if top_env else ""
+        name = path.relative_to(ROOT)
+        check(
+            re.search(r'^  GH_TELEMETRY: "false"$', body, re.MULTILINE), f"{name} turns off the GitHub CLI's telemetry"
+        )
+        check(re.search(r'^  DO_NOT_TRACK: "1"$', body, re.MULTILINE), f"{name} sets DO_NOT_TRACK")
+
+
 if __name__ == "__main__":
     try:
         test_notes()
         test_package()
         test_publish()
         test_plan()
+        test_no_telemetry()
     finally:
         shutil.rmtree(TMP, ignore_errors=True)
     print()

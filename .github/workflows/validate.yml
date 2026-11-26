@@ -13,6 +13,12 @@ on:
 # reviewed commit (the comment says which branch that commit was on) rather than following a branch that could change.
 permissions: {}
 
+# No telemetry from any tool a step runs: GH_TELEMETRY for the GitHub CLI (on by default),
+# DO_NOT_TRACK for any other tool that honours it. tests/test_release.py checks every workflow sets both.
+env:
+  GH_TELEMETRY: "false"
+  DO_NOT_TRACK: "1"
+
 jobs:
   validate-hacs:
     name: Marketplace checks (HACS action)

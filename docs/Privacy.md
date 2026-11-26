@@ -4,7 +4,8 @@
 
 The integration talks **only to National Grid**, through the
 [py-nationalgrid](https://github.com/virtitnerd/py-nationalgrid) library. There's no analytics, update check or
-other service.
+other service, and no telemetry of any kind: no usage reporting, crash reporting or tracking. That goes for the
+library and everything it installs too (`aiohttp`, `pyjwt` and their dependencies).
 
 What it asks National Grid for:
 

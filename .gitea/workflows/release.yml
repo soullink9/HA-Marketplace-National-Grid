@@ -24,7 +24,11 @@ on:
         description: "Version to release, without the v (for example 1.2.1)"
         required: true
 
+# No telemetry from any tool a step runs: GH_TELEMETRY for the GitHub CLI (on by default),
+# DO_NOT_TRACK for any other tool that honours it. tests/test_release.py checks every workflow sets both.
 env:
+  GH_TELEMETRY: "false"
+  DO_NOT_TRACK: "1"
   PUBLIC_REPOSITORY: soullink9/HA-Marketplace-National-Grid
   # Gitea's address as the job containers can reach it, if that isn't its public address (ROOT_URL): for a runner
   # next to Gitea, e.g. http://gitea-server:3000. Set it once as an Actions variable on your user or organisation.

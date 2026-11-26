@@ -14,7 +14,11 @@ on:
     branches: ["**"]
   pull_request:
 
+# No telemetry from any tool a step runs: GH_TELEMETRY for the GitHub CLI (on by default),
+# DO_NOT_TRACK for any other tool that honours it. tests/test_release.py checks every workflow sets both.
 env:
+  GH_TELEMETRY: "false"
+  DO_NOT_TRACK: "1"
   # Gitea's address as the job containers can reach it, if that isn't its public address (ROOT_URL): for a runner
   # next to Gitea, e.g. http://gitea-server:3000. Set it once as an Actions variable on your user or organisation.
   GITEA_INTERNAL_URL: ${{ vars.GITEA_INTERNAL_URL }}

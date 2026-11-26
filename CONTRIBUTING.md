@@ -9,6 +9,10 @@ how to check a change, and how to release one.
 - **Only National Grid is contacted, and only through [py-nationalgrid](https://github.com/virtitnerd/py-nationalgrid).**
   No other services, analytics or update checks. If National Grid changes its API, the fix belongs in the library;
   here we only bump the pinned version in `manifest.json`.
+- **No telemetry, ever.** Not in the integration, its dependencies, the workflows or the scripts: no analytics,
+  usage reporting, crash reporting or tracking. Every workflow sets `GH_TELEMETRY: "false"` and `DO_NOT_TRACK: "1"`
+  for the whole run (`tests/test_release.py` checks it); check any new dependency or action for telemetry before
+  adding it.
 - **Never rename an ID people depend on.** The statistic IDs (`nationalgrid:<service point>_energy`, `_return`,
   `_cost`, `_compensation`) are what users pick in their Energy dashboard, and the sensors' unique IDs
   (`<service point>_power` and so on) keep their entity IDs and history. Renaming either silently breaks
